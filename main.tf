@@ -79,3 +79,14 @@ resource "aws_transfer_ssh_key" "transfer_user" {
   user_name = aws_transfer_user.transfer_user.user_name
   body      = var.transfer_user_key
 }
+
+resource "aws_secretsmanager_secret" "pgp_key" {
+  name = "aws/transfer/${aws_transfer_server.test.id}/@pgp-default"
+
+  recovery_window_in_days = 0
+}
+
+resource "aws_secretsmanager_secret_version" "pgp_key" {
+  secret_id     = aws_secretsmanager_secret.pgp_key.id
+  secret_string = jsonencode(var.transfer_pgp_secret)
+}
