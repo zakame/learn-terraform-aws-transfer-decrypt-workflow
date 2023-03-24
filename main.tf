@@ -11,6 +11,14 @@ resource "aws_s3_bucket" "test_bucket" {
 resource "aws_transfer_server" "test" {
   security_policy_name = "TransferSecurityPolicy-2020-06"
 
+  logging_role = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/service-role/AWSTransferLoggingAccess"
+  workflow_details {
+    on_upload {
+      workflow_id    = aws_transfer_workflow.decrypt.id
+      execution_role = aws_iam_role.pgp_decrypt.arn
+    }
+  }
+
   force_destroy = true
 }
 
@@ -89,4 +97,66 @@ resource "aws_secretsmanager_secret" "pgp_key" {
 resource "aws_secretsmanager_secret_version" "pgp_key" {
   secret_id     = aws_secretsmanager_secret.pgp_key.id
   secret_string = jsonencode(var.transfer_pgp_secret)
+}
+
+data "aws_caller_identity" "current" {}
+
+data "aws_iam_policy_document" "pgp_decrypt" {
+  statement {
+    sid       = "ListBucket"
+    actions   = ["s3:ListBucket"]
+    effect    = "Allow"
+    resources = [aws_s3_bucket.test_bucket.arn]
+  }
+  statement {
+    sid = "HomeDirObjectAccess"
+    actions = [
+      "s3:PutObject",
+      "s3:GetObject",
+      "s3:DeleteObjectVersion",
+      "s3:DeleteObject",
+      "s3:GetObjectVersion"
+    ]
+    effect    = "Allow"
+    resources = ["${aws_s3_bucket.test_bucket.arn}/*"]
+  }
+  statement {
+    sid       = "Decrypt"
+    actions   = ["secretsmanager:GetSecretValue"]
+    effect    = "Allow"
+    resources = ["arn:aws:secretsmanager:${var.region}:${data.aws_caller_identity.current.account_id}:secret:aws/transfer/*"]
+  }
+}
+
+resource "aws_iam_policy" "pgp_decrypt" {
+  name = "aws-transfer-test-workflow-iam-policy"
+
+  policy = data.aws_iam_policy_document.pgp_decrypt.json
+}
+
+resource "aws_iam_role" "pgp_decrypt" {
+  name               = "aws-transfer-test-workflow-iam-role"
+  assume_role_policy = data.aws_iam_policy_document.assume_role.json
+  managed_policy_arns = [
+    "arn:aws:iam::aws:policy/AWSTransferFullAccess",
+    aws_iam_policy.pgp_decrypt.arn
+  ]
+}
+
+resource "aws_transfer_workflow" "decrypt" {
+  steps {
+    type = "DECRYPT"
+
+    decrypt_step_details {
+      type = "PGP"
+
+      source_file_location = "$${original.file}"
+      destination_file_location {
+        s3_file_location {
+          bucket = aws_s3_bucket.test_bucket.id
+          key    = "$${Transfer:UserName}/"
+        }
+      }
+    }
+  }
 }
