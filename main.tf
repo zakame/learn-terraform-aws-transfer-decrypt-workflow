@@ -72,7 +72,7 @@ resource "aws_iam_role_policy" "transfer_user" {
 
 resource "aws_transfer_user" "transfer_user" {
   server_id = aws_transfer_server.test.id
-  user_name = "test"
+  user_name = var.transfer_user_name
   role      = aws_iam_role.transfer_user.arn
 
   home_directory_type = "LOGICAL"
