@@ -3,6 +3,11 @@ variable "region" {
   description = "AWS region"
 }
 
+variable "transfer_user_name" {
+  default     = "test"
+  description = "Transfer user name"
+}
+
 variable "transfer_user_key" {
   description = "Public SSH key for Transfer user"
 }
